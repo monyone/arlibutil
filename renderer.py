@@ -14,7 +14,10 @@ from mpeg2ts.packet import Packet
 from mpeg2ts.section import Section
 from mpeg2ts.parser import SectionParser, PESParser
 from mpeg2ts.mjd import BCD, MJD_to_YMD
+
 from subtitle.render import Renderer
+
+from pgs.render import PGSRenderer
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description=('ARIB subtitle renderer'))
@@ -34,10 +37,14 @@ if __name__ == "__main__":
   PMT_Parser = SectionParser()
   TOT_Parser = SectionParser()
   SUBTITLE_Parser = PESParser()
+  PGS_Parser = PESParser()
 
   PMT_PID = -1
   PCR_PID = -1
   SUBTITLE_PID = -1
+  PGS_PID = -1
+
+  PGS_renderer = PGSRenderer()
 
   FIRST_PCR = None
   RENDER_COUNT = 0
@@ -84,6 +91,11 @@ if __name__ == "__main__":
           elementary_PID = ((PMT[begin + 1] & 0x1F) << 8) | PMT[begin + 2]
           ES_info_length = ((PMT[begin + 3] & 0x0F) << 8) | PMT[begin + 4]
 
+          if stream_type == 0x90 and PGS_PID is not None:
+            PGS_PID = elementary_PID
+            begin += 5 + ES_info_length
+            continue
+
           descriptor = begin + 5
           while descriptor < (begin + 5 + ES_info_length):
             descriptor_tag = PMT[descriptor + 0]
@@ -116,6 +128,13 @@ if __name__ == "__main__":
 
         FIRST_TOT = datetime(year, month, day, hour, min, sec)
 
+    elif ts.pid() == PGS_PID:
+      PGS_Parser.push(ts)
+      while not PGS_Parser.empty():
+        PGS = PGS_Parser.pop()
+        print('PTS', PGS.pts(), PGS.dts())
+        PGS_renderer.feed(PGS.PES_packet_data())
+
     elif ts.pid() == SUBTITLE_PID:
       SUBTITLE_Parser.push(ts)
       while not SUBTITLE_Parser.empty():
@@ -143,12 +162,12 @@ if __name__ == "__main__":
           if args.ffmpeg:
             output_ffmpeg_path = args.output_path.joinpath('{}-ffmpeg.{}'.format(args.format.format(RENDER_COUNT), args.suffix))
             ffmpeg = subprocess.Popen([
-             'ffmpeg',
-             '-ss', str(elapsed_seconds.total_seconds()),
-             '-i', args.input.name,
-             '-frames:v', '1',
-             '-s', '1920x1080',
-             output_ffmpeg_path,
+              'ffmpeg',
+              '-ss', str(elapsed_seconds.total_seconds()),
+              '-i', args.input.name,
+              '-frames:v', '1',
+              '-s', '1920x1080',
+              output_ffmpeg_path,
             ])
             ffmpeg.wait()
 

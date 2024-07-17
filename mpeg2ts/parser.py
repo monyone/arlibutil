@@ -63,7 +63,7 @@ class PESParser:
     if not packet.payload_unit_start_indicator() and not self.pes: return
 
     if packet.payload_unit_start_indicator():
-      if self.pes and self.pes.packet_length() == 0:
+      if self.pes and self.pes.PES_packet_length() == 0:
         self.queue.append(self.pes)
 
       pes_length = (packet[begin + 3] << 16) | (packet[begin + 4] << 8) | packet[begin + 5]
